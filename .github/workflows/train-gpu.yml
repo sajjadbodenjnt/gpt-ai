@@ -1,18 +1,18 @@
-name: Train AIBondhu (GPU)
+name: Train AIBondhu on licensed PMC medical literature
 on:
   workflow_dispatch:
     inputs:
-      dataset_path:
-        description: Path to authorized JSONL dataset available on the runner/repository
+      max_articles:
+        description: Maximum eligible open-access articles to stream (not the whole 3.4M corpus)
         required: true
-        default: data/training.jsonl
-      config:
-        description: Training config path
+        default: "10000"
+      max_steps:
+        description: Optimizer steps
         required: true
-        default: configs/train.yaml
+        default: "20000"
 jobs:
   train:
-    # Requires your own trusted GPU runner with these labels and CUDA-enabled PyTorch.
+    # A trusted self-hosted CUDA GPU runner is required; GitHub-hosted runners do not guarantee GPUs.
     runs-on: [self-hosted, linux, x64, gpu]
     timeout-minutes: 1440
     steps:
@@ -20,17 +20,37 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt
-      - name: Validate dataset path
-        run: test -f "${{ inputs.dataset_path }}" || (echo "Dataset not found. Place an authorized JSONL dataset on the runner." && exit 1)
-      - name: Prepare dataset
-        run: python scripts/prepare_dataset.py --input "${{ inputs.dataset_path }}" --output data/processed.jsonl
-      - name: Train from random initialization
-        run: python -m aibondhu.train --config "${{ inputs.config }}"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Stream and filter real medical literature
+        run: >-
+          python scripts/download_pmc_dataset.py
+          --max-articles "${{ inputs.max_articles }}"
+          --output data/processed.jsonl
+          --manifest data/pmc_manifest.jsonl
+      - name: Verify CUDA
+        run: python -c "import torch; print(torch.cuda.get_device_name(0)); assert torch.cuda.is_available()"
+      - name: Train AIBondhu from random initialization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("configs/train.yaml")
+          s = p.read_text()
+          import os
+          s = s.replace("max_steps: 20000", "max_steps: " + os.environ["MAX_STEPS"])
+          p.write_text(s)
+          PY
+          python -m aibondhu.train --config configs/train.yaml
+        env:
+          MAX_STEPS: "${{ inputs.max_steps }}"
+      - name: Evaluate checkpoint
+        run: python -m aibondhu.evaluate --checkpoint outputs/aibondhu/best.pt --config configs/train.yaml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: aibondhu-training-output
-          path: outputs/
+          name: aibondhu-pmc-training-output
+          path: |
+            outputs/
+            data/pmc_manifest.jsonl
           if-no-files-found: warn
           retention-days: 14
