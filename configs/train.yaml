@@ -1,0 +1,19 @@
+seed: 42
+data_path: data/processed.jsonl
+output_dir: outputs/aibondhu
+model:
+  vocab_size: 259
+  block_size: 512
+  n_layer: 8
+  n_head: 8
+  n_embd: 512
+train:
+  batch_size: 8
+  max_steps: 20000
+  eval_interval: 500
+  eval_batches: 50
+  learning_rate: 0.0003
+  weight_decay: 0.1
+  grad_clip: 1.0
+  num_workers: 2
+  device: auto
