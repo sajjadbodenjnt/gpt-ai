@@ -1,0 +1,19 @@
+seed: 17
+data_path: data/processed.jsonl
+output_dir: outputs/smoke
+model:
+  vocab_size: 259
+  block_size: 128
+  n_layer: 2
+  n_head: 2
+  n_embd: 64
+train:
+  batch_size: 4
+  max_steps: 8
+  eval_interval: 4
+  eval_batches: 2
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  grad_clip: 1.0
+  num_workers: 0
+  device: auto
