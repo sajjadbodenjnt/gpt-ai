@@ -44,7 +44,7 @@ jobs:
         env:
           MAX_STEPS: "${{ inputs.max_steps }}"
       - name: Evaluate checkpoint
-        run: python -m aibondhu.evaluate --checkpoint outputs/aibondhu/best.pt --config configs/train.yaml
+        run: python -m aibondhu.evaluate --checkpoint outputs/aibondhu/best.pt --data data/processed.jsonl
       - uses: actions/upload-artifact@v4
         if: always()
         with:
