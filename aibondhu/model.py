@@ -11,7 +11,7 @@ class CausalSelfAttention(nn.Module):
         self.head_dim = n_embd // n_head
         self.qkv = nn.Linear(n_embd, 3 * n_embd)
         self.proj = nn.Linear(n_embd, n_embd)
-        self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size)).view(1, 1, block_size, block_size), persistent=False)
+        self.register_buffer("mask", torch.tril(torch.ones(block_size, block_size, dtype=torch.bool)).view(1, 1, block_size, block_size), persistent=False)
 
     def forward(self, x):
         b, t, c = x.shape
