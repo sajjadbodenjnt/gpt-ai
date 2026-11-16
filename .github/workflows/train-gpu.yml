@@ -2,13 +2,17 @@ name: Train AIBondhu (GPU)
 on:
   workflow_dispatch:
     inputs:
+      dataset_path:
+        description: Path to authorized JSONL dataset available on the runner/repository
+        required: true
+        default: data/training.jsonl
       config:
         description: Training config path
         required: true
         default: configs/train.yaml
 jobs:
   train:
-    # Configure your own trusted GPU runner with these labels and PyTorch/CUDA support.
+    # Requires your own trusted GPU runner with these labels and CUDA-enabled PyTorch.
     runs-on: [self-hosted, linux, x64, gpu]
     timeout-minutes: 1440
     steps:
@@ -17,7 +21,10 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
-      - run: python scripts/prepare_dataset.py --input data/sample.jsonl --output data/processed.jsonl --min-chars 10
+      - name: Validate dataset path
+        run: test -f "${{ inputs.dataset_path }}" || (echo "Dataset not found. Place an authorized JSONL dataset on the runner." && exit 1)
+      - name: Prepare dataset
+        run: python scripts/prepare_dataset.py --input "${{ inputs.dataset_path }}" --output data/processed.jsonl
       - name: Train from random initialization
         run: python -m aibondhu.train --config "${{ inputs.config }}"
       - uses: actions/upload-artifact@v4
