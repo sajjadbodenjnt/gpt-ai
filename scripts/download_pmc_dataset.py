@@ -1,73 +1,104 @@
-"""Stream the official PMC Open Access dataset into AIBondhu JSONL.
+"""Download a small, license-filtered PMC sample through the official PMC Cloud Service.
 
-Only CC0, CC BY and CC BY-SA records are admitted by default. This deliberately
-excludes non-commercial, no-derivatives, unknown/custom-license records and
-retracted articles. The upstream dataset's per-record license remains the
-controlling term; retain the metadata manifest for attribution.
+PMC retired its legacy FTP bulk directories in August 2026. This downloader
+uses the supported NCBI E-utilities search + PMC S3 Cloud Service pipeline.
+Only CC0, CC BY and CC BY-SA are admitted; non-commercial, no-derivatives,
+TDM-only, unknown and retracted records are excluded.
 """
 import argparse
 import json
 import re
+import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import quote
 
-from datasets import load_dataset
+import requests
 
+BASE = "https://pmc-oa-opendata.s3.amazonaws.com/"
+ESEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 ALLOWED = {"CC0", "CC BY", "CC BY-SA"}
+SESSION = requests.Session()
+SESSION.headers.update({"User-Agent": "AIBondhuResearch/0.1 (educational research)"})
 
-def clean(text: str) -> str:
-    text = re.sub(r"\s+", " ", text or "").strip()
-    return text
+def get(url, **kwargs):
+    response = SESSION.get(url, timeout=60, **kwargs)
+    response.raise_for_status()
+    return response
+
+def clean(text):
+    return re.sub(r"\\s+", " ", text or "").strip()
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--output", default="data/pmc_open_access.jsonl")
     p.add_argument("--manifest", default="data/pmc_manifest.jsonl")
-    p.add_argument("--max-articles", type=int, default=10000)
+    p.add_argument("--max-articles", type=int, default=100)
     p.add_argument("--max-chars", type=int, default=12000)
     p.add_argument("--min-chars", type=int, default=500)
-    p.add_argument("--split", default="train")
     args = p.parse_args()
 
-    # This dataset currently uses a repository-provided loading script.
-    # datasets 4+ removed script-based loading; requirements pins v3.
-    stream = load_dataset(
-        "pmc/open_access",
-        split=args.split,
-        streaming=True,
-        trust_remote_code=True,
-    )
+    query = '((cc0_license[Filter] OR cc_by_license[Filter] OR cc_by-sa_license[Filter]) AND (open_access[Filter] OR author_manuscript[Filter]))'
+    search = get(ESEARCH, params={"db":"pmc", "term":query, "retmax":max(args.max_articles * 5, 500), "retmode":"json"})
+    ids = search.json().get("esearchresult", {}).get("idlist", [])
+    if not ids:
+        raise SystemExit("NCBI E-utilities returned no eligible PMC IDs; refusing to train.")
+
     out_path, manifest_path = Path(args.output), Path(args.manifest)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    kept = rejected = errors = 0
 
-    kept = rejected = 0
     with out_path.open("w", encoding="utf-8") as out, manifest_path.open("w", encoding="utf-8") as manifest:
-        for row in stream:
-            license_name = str(row.get("license", "")).strip().upper()
-            retracted = str(row.get("retracted", "")).strip().lower()
-            text = clean(row.get("text", ""))
-            if license_name not in ALLOWED or retracted in {"yes", "true", "1"} or len(text) < args.min_chars:
-                rejected += 1
-                continue
-            text = text[:args.max_chars]
-            record = {
-                "text": text,
-                "pmid": str(row.get("pmid", "")),
-                "accession_id": str(row.get("accession_id", "")),
-                "license": license_name,
-                "citation": str(row.get("citation", "")),
-            }
-            out.write(json.dumps({"text": text}, ensure_ascii=False) + "\n")
-            manifest.write(json.dumps({k: v for k, v in record.items() if k != "text"}, ensure_ascii=False) + "\n")
-            kept += 1
+        for pmcid_num in ids:
             if kept >= args.max_articles:
                 break
-    if kept < 100:
-        raise SystemExit(f"Only {kept} eligible records found; refusing to start training.")
-    print(f"Eligible PMC articles: {kept}; skipped: {rejected}")
-    print(f"Training text: {out_path}; attribution/license manifest: {manifest_path}")
-    print("Source: https://huggingface.co/datasets/pmc/open_access")
-    print("Training is research/education only, not clinical validation.")
+            pmcid = "PMC" + str(pmcid_num)
+            try:
+                listing = get(BASE, params={"list-type":"2", "delimiter":"/", "prefix":pmcid + "."})
+                root = ET.fromstring(listing.content)
+                prefixes = sorted({n.text for n in root.findall(".//{*}CommonPrefixes/{*}Prefix") if n.text})
+                for prefix in prefixes:
+                    version_name = prefix.rstrip("/").split("/")[-1]
+                    meta_url = BASE + "metadata/" + quote(version_name + ".json")
+                    meta = get(meta_url).json()
+                    license_name = str(meta.get("license_code", "")).strip().upper().replace("-", " ")
+                    license_name = re.sub(r"\\s+", " ", license_name)
+                    if license_name not in ALLOWED or str(meta.get("is_retracted", "")).lower() in {"yes", "true", "1"}:
+                        rejected += 1
+                        continue
+                    text_url = meta.get("text_url") or (BASE + quote(prefix + version_name + ".txt", safe="/"))
+                    article_text = clean(get(text_url).text)
+                    if len(article_text) < args.min_chars:
+                        rejected += 1
+                        continue
+                    article_text = article_text[:args.max_chars]
+                    out.write(json.dumps({"text": article_text}, ensure_ascii=False) + "\\n")
+                    manifest.write(json.dumps({
+                        "pmcid": pmcid,
+                        "version": str(meta.get("version", "")),
+                        "pmid": str(meta.get("pmid", "")),
+                        "doi": str(meta.get("doi", "")),
+                        "title": str(meta.get("title", "")),
+                        "citation": str(meta.get("citation", "")),
+                        "license": license_name,
+                        "source": text_url,
+                        "is_retracted": False,
+                    }, ensure_ascii=False) + "\\n")
+                    kept += 1
+                    if kept >= args.max_articles:
+                        break
+                time.sleep(0.12)
+            except (requests.RequestException, ValueError, ET.ParseError, KeyError) as exc:
+                errors += 1
+                print(f"Skipping {pmcid}: {type(exc).__name__}: {exc}")
 
+    if kept < 100:
+        raise SystemExit(f"Only {kept} eligible articles collected (rejected={rejected}, errors={errors}); refusing to start training.")
+    print(f"Eligible PMC articles: {kept}; rejected: {rejected}; retrieval errors: {errors}")
+    print(f"Training text: {out_path}; attribution/license manifest: {manifest_path}")
+    print("Source: https://pmc.ncbi.nlm.nih.gov/tools/pmcaws/")
+    print("Research/education only; this model is not clinically validated.")
+    
 if __name__ == "__main__":
     main()
