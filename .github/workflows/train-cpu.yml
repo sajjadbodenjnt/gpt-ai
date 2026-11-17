@@ -12,7 +12,7 @@ on:
       max_articles:
         description: Maximum eligible open-access PMC articles
         required: true
-        default: "5000"
+        default: "300"
       max_steps:
         description: CPU optimizer steps for this training run
         required: true
@@ -40,7 +40,7 @@ jobs:
       - name: Download and license-filter PMC Open Access articles
         run: >-
           python scripts/download_pmc_dataset.py
-          --max-articles "${{ inputs.max_articles || '100' }}"
+          --max-articles "${{ inputs.max_articles || '300' }}"
           --output data/processed.jsonl
           --manifest data/pmc_manifest.jsonl
       - name: Set CPU training steps
