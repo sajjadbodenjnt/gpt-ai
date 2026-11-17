@@ -12,9 +12,9 @@ on:
       max_articles:
         description: Maximum eligible open-access PMC articles
         required: true
-        default: "100"
+        default: "5000"
       max_steps:
-        description: CPU optimizer steps for this starter run
+        description: CPU optimizer steps for this training run
         required: true
         default: "100"
 jobs:
@@ -45,14 +45,14 @@ jobs:
           --manifest data/pmc_manifest.jsonl
       - name: Set CPU training steps
         env:
-          MAX_STEPS: "${{ inputs.max_steps || '100' }}"
+          MAX_STEPS: "${{ inputs.max_steps || '5000' }}"
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
           p = Path("configs/cpu.yaml")
           s = p.read_text()
-          s = s.replace("max_steps: 100", "max_steps: " + str(max(1, min(int(os.environ["MAX_STEPS"]), 2000))))
+          s = s.replace("max_steps: 100", "max_steps: " + str(max(1, min(int(os.environ["MAX_STEPS"]), 5000))))
           p.write_text(s)
           PY
       - name: Train small AIBondhu model on CPU
