@@ -57,8 +57,8 @@ def main():
                 "license": license_name,
                 "citation": str(row.get("citation", "")),
             }
-            out.write(json.dumps({"text": text}, ensure_ascii=False) + "\\n")
-            manifest.write(json.dumps({k: v for k, v in record.items() if k != "text"}, ensure_ascii=False) + "\\n")
+            out.write(json.dumps({"text": text}, ensure_ascii=False) + "\n")
+            manifest.write(json.dumps({k: v for k, v in record.items() if k != "text"}, ensure_ascii=False) + "\n")
             kept += 1
             if kept >= args.max_articles:
                 break
