@@ -1,4 +1,5 @@
 name: Train AIBondhu on CPU (licensed PMC literature)
+run-name: AIBondhu CPU training - licensed PMC sample
 on:
   push:
     branches: [main]
