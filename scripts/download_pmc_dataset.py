@@ -74,6 +74,9 @@ def main():
                         rejected += 1
                         continue
                     text_url = meta.get("text_url") or (BASE + quote(prefix + version_name + ".txt", safe="/"))
+                    # PMC metadata may publish an s3:// URI; translate it to the public HTTPS object endpoint.
+                    if text_url.startswith("s3://pmc-oa-opendata/"):
+                        text_url = "https://pmc-oa-opendata.s3.amazonaws.com/" + quote(text_url[len("s3://pmc-oa-opendata/"):], safe="/?=&")
                     article_text = clean(get(text_url).text)
                     if len(article_text) < args.min_chars:
                         rejected += 1
