@@ -1,9 +1,8 @@
-"""Download a small, license-filtered PMC sample through the official PMC Cloud Service.
+"""Download a license-filtered PMC sample via the official PMC Cloud Service.
 
-PMC retired its legacy FTP bulk directories in August 2026. This downloader
-uses the supported NCBI E-utilities search + PMC S3 Cloud Service pipeline.
-Only CC0, CC BY and CC BY-SA are admitted; non-commercial, no-derivatives,
-TDM-only, unknown and retracted records are excluded.
+The legacy PMC FTP bulk directories were retired in August 2026. This uses
+NCBI E-utilities plus the supported PMC S3 Cloud Service. Only CC0, CC BY,
+and CC BY-SA are admitted; retracted and other-license records are excluded.
 """
 import argparse
 import json
@@ -27,7 +26,7 @@ def get(url, **kwargs):
     return response
 
 def clean(text):
-    return re.sub(r"\\s+", " ", text or "").strip()
+    return re.sub(r"\s+", " ", text or "").strip()
 
 def main():
     p = argparse.ArgumentParser()
@@ -39,7 +38,10 @@ def main():
     args = p.parse_args()
 
     query = '((cc0_license[Filter] OR cc_by_license[Filter] OR cc_by-sa_license[Filter]) AND (open_access[Filter] OR author_manuscript[Filter]))'
-    search = get(ESEARCH, params={"db":"pmc", "term":query, "retmax":max(args.max_articles * 5, 500), "retmode":"json"})
+    search = get(ESEARCH, params={
+        "db": "pmc", "term": query,
+        "retmax": max(args.max_articles * 5, 500), "retmode": "json"
+    })
     ids = search.json().get("esearchresult", {}).get("idlist", [])
     if not ids:
         raise SystemExit("NCBI E-utilities returned no eligible PMC IDs; refusing to train.")
@@ -55,15 +57,19 @@ def main():
                 break
             pmcid = "PMC" + str(pmcid_num)
             try:
-                listing = get(BASE, params={"list-type":"2", "delimiter":"/", "prefix":pmcid + "."})
+                listing = get(BASE, params={
+                    "list-type": "2", "delimiter": "/", "prefix": pmcid + "."
+                })
                 root = ET.fromstring(listing.content)
-                prefixes = sorted({n.text for n in root.findall(".//{*}CommonPrefixes/{*}Prefix") if n.text})
+                prefixes = sorted({
+                    node.text for node in root.findall(".//{*}CommonPrefixes/{*}Prefix")
+                    if node.text
+                })
                 for prefix in prefixes:
                     version_name = prefix.rstrip("/").split("/")[-1]
                     meta_url = BASE + "metadata/" + quote(version_name + ".json")
                     meta = get(meta_url).json()
-                    license_name = str(meta.get("license_code", "")).strip().upper().replace("-", " ")
-                    license_name = re.sub(r"\\s+", " ", license_name)
+                    license_name = str(meta.get("license_code", "")).strip().upper()
                     if license_name not in ALLOWED or str(meta.get("is_retracted", "")).lower() in {"yes", "true", "1"}:
                         rejected += 1
                         continue
@@ -73,7 +79,7 @@ def main():
                         rejected += 1
                         continue
                     article_text = article_text[:args.max_chars]
-                    out.write(json.dumps({"text": article_text}, ensure_ascii=False) + "\\n")
+                    out.write(json.dumps({"text": article_text}, ensure_ascii=False) + "\n")
                     manifest.write(json.dumps({
                         "pmcid": pmcid,
                         "version": str(meta.get("version", "")),
@@ -84,7 +90,7 @@ def main():
                         "license": license_name,
                         "source": text_url,
                         "is_retracted": False,
-                    }, ensure_ascii=False) + "\\n")
+                    }, ensure_ascii=False) + "\n")
                     kept += 1
                     if kept >= args.max_articles:
                         break
@@ -94,11 +100,13 @@ def main():
                 print(f"Skipping {pmcid}: {type(exc).__name__}: {exc}")
 
     if kept < 100:
-        raise SystemExit(f"Only {kept} eligible articles collected (rejected={rejected}, errors={errors}); refusing to start training.")
+        raise SystemExit(
+            f"Only {kept} eligible articles collected (rejected={rejected}, errors={errors}); refusing to start training."
+        )
     print(f"Eligible PMC articles: {kept}; rejected: {rejected}; retrieval errors: {errors}")
     print(f"Training text: {out_path}; attribution/license manifest: {manifest_path}")
     print("Source: https://pmc.ncbi.nlm.nih.gov/tools/pmcaws/")
     print("Research/education only; this model is not clinically validated.")
-    
+
 if __name__ == "__main__":
     main()
