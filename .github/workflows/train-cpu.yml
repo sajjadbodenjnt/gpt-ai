@@ -1,0 +1,66 @@
+name: Train AIBondhu on CPU (licensed PMC literature)
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/train-cpu.yml"
+      - "configs/cpu.yaml"
+  workflow_dispatch:
+    inputs:
+      max_articles:
+        description: Maximum eligible open-access PMC articles
+        required: true
+        default: "100"
+      max_steps:
+        description: CPU optimizer steps for this starter run
+        required: true
+        default: "100"
+jobs:
+  train-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Confirm CPU runtime
+        run: python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('CPU threads:', torch.get_num_threads())"
+      - name: Download and license-filter PMC Open Access articles
+        run: >-
+          python scripts/download_pmc_dataset.py
+          --max-articles "${{ inputs.max_articles || '100' }}"
+          --output data/processed.jsonl
+          --manifest data/pmc_manifest.jsonl
+      - name: Set CPU training steps
+        env:
+          MAX_STEPS: "${{ inputs.max_steps || '100' }}"
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path("configs/cpu.yaml")
+          s = p.read_text()
+          s = s.replace("max_steps: 100", "max_steps: " + str(max(1, min(int(os.environ["MAX_STEPS"]), 2000))))
+          p.write_text(s)
+          PY
+      - name: Train small AIBondhu model on CPU
+        run: python -m aibondhu.train --config configs/cpu.yaml
+      - name: Evaluate language-model loss
+        run: python -m aibondhu.evaluate --checkpoint outputs/aibondhu-cpu/best.pt --data data/processed.jsonl
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: aibondhu-cpu-training-output
+          path: |
+            outputs/aibondhu-cpu/
+            data/pmc_manifest.jsonl
+          if-no-files-found: warn
+          retention-days: 14
