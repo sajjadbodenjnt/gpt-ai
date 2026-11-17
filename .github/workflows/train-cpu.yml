@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/train-cpu.yml"
       - "configs/cpu.yaml"
+      - "scripts/download_pmc_dataset.py"
   workflow_dispatch:
     inputs:
       max_articles:
