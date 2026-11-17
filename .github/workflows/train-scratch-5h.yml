@@ -18,6 +18,9 @@ on:
         description: CPU training time in minutes (maximum 300)
         required: true
         default: "300"
+concurrency:
+  group: aibondhu-scratch-cpu-training
+  cancel-in-progress: true
 jobs:
   train-from-scratch:
     runs-on: ubuntu-latest
