@@ -15,7 +15,7 @@ from datasets import load_dataset
 ALLOWED = {"CC0", "CC BY", "CC BY-SA"}
 
 def clean(text: str) -> str:
-    text = re.sub(r"\s+", " ", text or "").strip()
+    text = re.sub(r"\\s+", " ", text or "").strip()
     return text
 
 def main():
@@ -28,8 +28,14 @@ def main():
     p.add_argument("--split", default="train")
     args = p.parse_args()
 
-    # Official PubMed Central dataset mirrored by its curator on Hugging Face.
-    stream = load_dataset("pmc/open_access", split=args.split, streaming=True)
+    # This dataset currently uses a repository-provided loading script.
+    # datasets 4+ removed script-based loading; requirements pins v3.
+    stream = load_dataset(
+        "pmc/open_access",
+        split=args.split,
+        streaming=True,
+        trust_remote_code=True,
+    )
     out_path, manifest_path = Path(args.output), Path(args.manifest)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,8 +57,8 @@ def main():
                 "license": license_name,
                 "citation": str(row.get("citation", "")),
             }
-            out.write(json.dumps({"text": text}, ensure_ascii=False) + "\n")
-            manifest.write(json.dumps({k: v for k, v in record.items() if k != "text"}, ensure_ascii=False) + "\n")
+            out.write(json.dumps({"text": text}, ensure_ascii=False) + "\\n")
+            manifest.write(json.dumps({k: v for k, v in record.items() if k != "text"}, ensure_ascii=False) + "\\n")
             kept += 1
             if kept >= args.max_articles:
                 break
