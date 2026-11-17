@@ -50,13 +50,12 @@ def main():
     out=Path(a.output); out.mkdir(parents=True,exist_ok=True)
     # This tokenizer is trained only on this corpus; no vendor model/tokenizer/weights.
     tokenizer=ByteLevelBPETokenizer()
+    tok_path=out/"tokenizer"
+    tok_path.mkdir(parents=True, exist_ok=True)
     tokenizer.train_from_iterator(train_docs, vocab_size=8000, min_frequency=2,
                                   special_tokens=["<|endoftext|>"])
     tokenizer.save_model(str(out/"tokenizer"))
-    tok_path=out/"tokenizer"
-    from tokenizers import Tokenizer
-    tok=Tokenizer.from_file(str(tok_path/"tokenizer.json")) if (tok_path/"tokenizer.json").exists() else None
-    # ByteLevelBPETokenizer saves vocab/merges; load through its wrapper.
+    # ByteLevelBPETokenizer saves vocab/merges; reload the corpus-trained tokenizer.
     from tokenizers import ByteLevelBPETokenizer as BPE
     tok=BPE(str(tok_path/"vocab.json"),str(tok_path/"merges.txt"))
     eos=tok.token_to_id("<|endoftext|>")
