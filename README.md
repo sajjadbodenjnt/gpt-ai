@@ -49,3 +49,8 @@ The evaluation script reports language-model validation loss/perplexity only. It
 
 ## License
 Code: MIT (see LICENSE). Dataset and model artifacts retain all obligations of their source licenses; this repository does not grant rights to third-party data.
+
+
+## AIBondhu from-scratch CPU experiment
+
+A separate experimental pipeline builds a small GPT and ByteLevel BPE tokenizer from random initialization (no company pretrained weights/tokenizer): see [Bengali instructions](docs/SCRATCH_TRAINING_BN.md) and `.github/workflows/train-scratch-5h.yml`. The workflow targets up to 300 minutes of CPU training on licensed PMC Open Access biomedical articles. Five hours of CPU training cannot create an extremely intelligent or clinically reliable model; the output is a research prototype only. Checkpoint and tokenizer are uploaded as an Actions artifact, not committed to Git.
