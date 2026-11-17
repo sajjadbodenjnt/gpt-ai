@@ -15,7 +15,7 @@ from datasets import load_dataset
 ALLOWED = {"CC0", "CC BY", "CC BY-SA"}
 
 def clean(text: str) -> str:
-    text = re.sub(r"\\s+", " ", text or "").strip()
+    text = re.sub(r"\s+", " ", text or "").strip()
     return text
 
 def main():
